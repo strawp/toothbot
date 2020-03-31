@@ -4,6 +4,7 @@ import time, copy
 from sys import exit
 from decimal import *
 from random import shuffle
+import usb.core
 
 import scrollphathd as sphd 
 from scrollphathd.fonts import font3x5
@@ -11,6 +12,27 @@ from scrollphathd.fonts import font3x5
 IMAGE_BRIGHTNESS = 0.5
 
 sphd.flip(True,True)
+
+# http://files.righto.com/files/PanicButton.py
+class PanicButton:
+  def __init__(self):
+    # Device is: ID 1130:0202 Tenx Technology, Inc. 
+    self.dev = usb.core.find(idVendor=0x1130, idProduct=0x0202)
+    if not self.dev:
+      raise ValueError("Panic Button not found")
+    
+    try:
+      self.dev.detach_kernel_driver(0) # Get rid of hidraw
+    except Exception, e:
+      pass # already unregistered
+
+  def read(self):
+    """ Read the USB port.
+    Return 1 if pressed and released, 0 otherwise.
+    """
+    #Magic numbers are from http://search.cpan.org/~bkendi/Device-USB-PanicButton-0.04/lib/Device/USB/PanicButton.pm
+    return self.dev.ctrl_transfer(bmRequestType=0xA1, bRequest=1, wValue=0x300, data_or_wLength=8, timeout=500)[0]
+    
 
 class Sprite(object):
   top = 0
@@ -89,6 +111,35 @@ def grin():
   bottom.draw()
   sphd.show()
 
+def open_mouth(row='b'):
+  top = copy.deepcopy(teeth)
+  bottom = copy.deepcopy(teeth)
+  bottom.flip()
+  top.top = 0
+  bottom.top = 3
+  top.draw()
+  bottom.draw()
+  sphd.show()
+  if row == 'b':
+    top.top -= 1
+    for i in range(4):
+      sphd.clear()
+      bottom.top+=1
+      bottom.draw()
+      top.draw()
+      sphd.show()
+      time.sleep(0.1)
+  else:
+    bottom.top += 1
+    for i in range(4):
+      sphd.clear()
+      bottom.top-=1
+      bottom.draw()
+      top.draw()
+      sphd.show()
+      time.sleep(0.1)
+  
+
 def brush_teeth( corner='tl', seconds=30 ):
   t = copy.deepcopy(teeth)
   b = copy.deepcopy(toothbrush)
@@ -131,29 +182,26 @@ def brush_teeth( corner='tl', seconds=30 ):
     sphd.show()
     time.sleep(0.01)
 
-grin()
-time.sleep(3)
-corners = 'tl,tr,br,bl,tl,tr,br,bl'.split(',')
-shuffle(corners)
-for corner in corners:
-  brush_teeth(corner, 1)
+def game_loop():
+  sphd.clear()
+  grin()
+  button = PanicButton()
+  while True:
+    if button.read():
+      break
+    time.sleep(0.5)
 
-sphd.clear()
-sphd.set_font(font3x5)
-sphd.write_string('Done!')
-sphd.show()
-time.sleep(5)
-# try:
-#     for x in range(0, scrollphathd.DISPLAY_WIDTH):
-#         for y in range(0, scrollphathd.DISPLAY_HEIGHT):
-#             brightness = get_pixel(x, y)
-#             scrollphathd.pixel(x, 6-y, brightness * IMAGE_BRIGHTNESS)
-# 
-#     while True:
-#         scrollphathd.show()
-#         time.sleep(0.03)
-#         scrollphathd.scroll(-1)
-# 
-# except KeyboardInterrupt:
-#     scrollphathd.clear()
-#     scrollphathd.show()
+  corners = 'tl,tr,br,bl,tl,tr,br,bl'.split(',')
+  # shuffle(corners)
+  open_mouth()
+  for corner in corners:
+    brush_teeth(corner, 15)
+
+  sphd.clear()
+  sphd.set_font(font3x5)
+  sphd.write_string('Done!')
+  sphd.show()
+  time.sleep(5)
+
+while True:
+  game_loop()
